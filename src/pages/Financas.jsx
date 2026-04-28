@@ -1,30 +1,28 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { TrendingUp, TrendingDown, CreditCard, Plus, Trash2, Edit2, X, Check, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts'
 import clsx from 'clsx'
 import { useLocalStorage } from '../hooks/useLocalStorage'
 
-const evolucao = [
-  { mes: 'Jan', saldo: 2100 }, { mes: 'Fev', saldo: 2400 }, { mes: 'Mar', saldo: 2200 },
-  { mes: 'Abr', saldo: 2900 }, { mes: 'Mai', saldo: 3100 }, { mes: 'Jun', saldo: 2800 }, { mes: 'Jul', saldo: 3847 },
-]
-const gastosCat = [
-  { cat: 'Alimentação', valor: 850, color: '#f97316' }, { cat: 'Transporte', valor: 420, color: '#3b82f6' },
-  { cat: 'Lazer', valor: 320, color: '#a78bfa' }, { cat: 'Saúde', valor: 280, color: '#ec4899' },
-]
+const CATS = ['Alimentação','Transporte','Lazer','Saúde','Educação','Casa','Roupas','Renda','Freelance','Outro']
+const BANDEIRAS = ['Visa','Mastercard','Elo','American Express','Hipercard']
+const TABS = ['Visão Geral','Transações','Cartões','Metas']
+const CORES_META = ['#7c3aed','#10b981','#3b82f6','#f59e0b','#ef4444','#ec4899']
+const CORES_CARTAO = ['from-purple-500 to-brand-600','from-orange-400 to-orange-600','from-blue-500 to-cyan-500','from-green-500 to-emerald-600','from-red-500 to-pink-600']
 
-const CATS = ['Alimentação', 'Transporte', 'Lazer', 'Saúde', 'Educação', 'Casa', 'Roupas', 'Renda', 'Freelance', 'Outro']
-const BANDEIRAS = ['Visa', 'Mastercard', 'Elo', 'American Express', 'Hipercard']
-const TABS = ['Visão Geral', 'Transações', 'Cartões', 'Metas']
-const CORES_META = ['#7c3aed', '#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#ec4899']
-const CORES_CARTAO = ['from-purple-500 to-brand-600', 'from-orange-400 to-orange-600', 'from-blue-500 to-cyan-500', 'from-green-500 to-emerald-600', 'from-red-500 to-pink-600']
+// Cores para barras do gráfico de categorias
+const CAT_COLORS = {
+  'Alimentação':'#f97316','Transporte':'#3b82f6','Lazer':'#a78bfa',
+  'Saúde':'#ec4899','Educação':'#6366f1','Casa':'#eab308',
+  'Roupas':'#f43f5e','Outro':'#6b7280','Freelance':'#10b981','Renda':'#10b981'
+}
 
 const transDefault = [
-  { id: 1, desc: 'Salário', valor: 4500, tipo: 'receita', data: '01/07', cat: 'Renda' },
-  { id: 2, desc: 'Supermercado', valor: -320, tipo: 'despesa', data: '03/07', cat: 'Alimentação' },
-  { id: 3, desc: 'Gym', valor: -89.90, tipo: 'despesa', data: '05/07', cat: 'Saúde' },
-  { id: 4, desc: 'Netflix', valor: -39.90, tipo: 'despesa', data: '08/07', cat: 'Lazer' },
-  { id: 5, desc: 'Freelance', valor: 800, tipo: 'receita', data: '10/07', cat: 'Freelance' },
+  { id: 1, desc: 'Salário', valor: 4500, tipo: 'receita', data: new Date().toISOString().split('T')[0], cat: 'Renda' },
+  { id: 2, desc: 'Supermercado', valor: -320, tipo: 'despesa', data: new Date().toISOString().split('T')[0], cat: 'Alimentação' },
+  { id: 3, desc: 'Gym', valor: -89.90, tipo: 'despesa', data: new Date().toISOString().split('T')[0], cat: 'Saúde' },
+  { id: 4, desc: 'Netflix', valor: -39.90, tipo: 'despesa', data: new Date().toISOString().split('T')[0], cat: 'Lazer' },
+  { id: 5, desc: 'Freelance', valor: 800, tipo: 'receita', data: new Date().toISOString().split('T')[0], cat: 'Freelance' },
 ]
 const cartoesDefault = [
   { id: 1, nome: 'Nubank', bandeira: 'Mastercard', limite: 5000, fatura: 1240, vencimento: '10', cor: 'from-purple-500 to-brand-600' },
@@ -58,11 +56,66 @@ export default function Financas() {
   const [modalTrans, setModalTrans] = useState(null)
   const [modalCartao, setModalCartao] = useState(null)
   const [modalMeta, setModalMeta] = useState(null)
-  const [fTrans, setFTrans] = useState({ desc: '', valor: '', tipo: 'despesa', cat: 'Alimentação', data: new Date().toISOString().split('T')[0] })
-  const [fCartao, setFCartao] = useState({ nome: '', bandeira: 'Visa', limite: '', fatura: '', vencimento: '' })
-  const [fMeta, setFMeta] = useState({ nome: '', meta: '', atual: '', cor: '#7c3aed' })
+  const [fTrans, setFTrans] = useState({ desc:'', valor:'', tipo:'despesa', cat:'Alimentação', data: new Date().toISOString().split('T')[0] })
+  const [fCartao, setFCartao] = useState({ nome:'', bandeira:'Visa', limite:'', fatura:'', vencimento:'' })
+  const [fMeta, setFMeta] = useState({ nome:'', meta:'', atual:'', cor:'#7c3aed' })
 
-  const abrirTrans = (t = null) => { setFTrans(t ? { desc: t.desc, valor: Math.abs(t.valor), tipo: t.tipo, cat: t.cat, data: t.data } : { desc: '', valor: '', tipo: 'despesa', cat: 'Alimentação', data: new Date().toISOString().split('T')[0] }); setModalTrans(t ? t.id : 'novo') }
+  // ── Cálculos reativos ────────────────────────────────────────
+  const receitas = useMemo(() => transacoes.filter(t => t.valor > 0).reduce((s,t) => s + t.valor, 0), [transacoes])
+  const despesas = useMemo(() => transacoes.filter(t => t.valor < 0).reduce((s,t) => s + Math.abs(t.valor), 0), [transacoes])
+  const saldo = receitas - despesas
+
+  // Gráfico de gastos por categoria (calculado dos dados reais)
+  const gastosCat = useMemo(() => {
+    const mapa = {}
+    transacoes.filter(t => t.valor < 0).forEach(t => {
+      mapa[t.cat] = (mapa[t.cat] || 0) + Math.abs(t.valor)
+    })
+    return Object.entries(mapa)
+      .map(([cat, valor]) => ({ cat, valor: +valor.toFixed(2), color: CAT_COLORS[cat] || '#6b7280' }))
+      .sort((a, b) => b.valor - a.valor)
+      .slice(0, 6)
+  }, [transacoes])
+
+  // Gráfico de evolução mensal (calculado dos dados reais)
+  const evolucaoMensal = useMemo(() => {
+    const meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+    const agora = new Date()
+    const resultado = []
+    // Últimos 6 meses
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(agora.getFullYear(), agora.getMonth() - i, 1)
+      const mesIdx = d.getMonth()
+      const ano = d.getFullYear()
+      const mesLabel = meses[mesIdx]
+
+      const saldoMes = transacoes
+        .filter(t => {
+          try {
+            const dt = new Date(t.data)
+            return dt.getMonth() === mesIdx && dt.getFullYear() === ano
+          } catch { return false }
+        })
+        .reduce((s, t) => s + t.valor, 0)
+
+      resultado.push({ mes: mesLabel, saldo: +saldoMes.toFixed(2) })
+    }
+    // Se não houver dados reais, mostra pelo menos o saldo total
+    const temDados = resultado.some(r => r.saldo !== 0)
+    if (!temDados) {
+      return resultado.map((r, i) => ({ ...r, saldo: i === resultado.length - 1 ? saldo : 0 }))
+    }
+    return resultado
+  }, [transacoes, saldo])
+
+  // ── Handlers ────────────────────────────────────────────────
+  const abrirTrans = (t = null) => {
+    setFTrans(t
+      ? { desc: t.desc, valor: Math.abs(t.valor), tipo: t.tipo, cat: t.cat, data: t.data }
+      : { desc:'', valor:'', tipo:'despesa', cat:'Alimentação', data: new Date().toISOString().split('T')[0] }
+    )
+    setModalTrans(t ? t.id : 'novo')
+  }
   const salvarTrans = () => {
     if (!fTrans.desc || !fTrans.valor) return
     const val = fTrans.tipo === 'receita' ? Math.abs(+fTrans.valor) : -Math.abs(+fTrans.valor)
@@ -71,7 +124,10 @@ export default function Financas() {
     setModalTrans(null)
   }
 
-  const abrirCartao = (c = null) => { setFCartao(c ? { nome: c.nome, bandeira: c.bandeira, limite: c.limite, fatura: c.fatura, vencimento: c.vencimento } : { nome: '', bandeira: 'Visa', limite: '', fatura: '', vencimento: '' }); setModalCartao(c ? c.id : 'novo') }
+  const abrirCartao = (c = null) => {
+    setFCartao(c ? { nome: c.nome, bandeira: c.bandeira, limite: c.limite, fatura: c.fatura, vencimento: c.vencimento } : { nome:'', bandeira:'Visa', limite:'', fatura:'', vencimento:'' })
+    setModalCartao(c ? c.id : 'novo')
+  }
   const salvarCartao = () => {
     if (!fCartao.nome || !fCartao.limite) return
     if (modalCartao === 'novo') setCartoes(p => [...p, { ...fCartao, id: Date.now(), limite: +fCartao.limite, fatura: +fCartao.fatura || 0, cor: CORES_CARTAO[p.length % CORES_CARTAO.length] }])
@@ -79,7 +135,10 @@ export default function Financas() {
     setModalCartao(null)
   }
 
-  const abrirMeta = (m = null) => { setFMeta(m ? { nome: m.nome, meta: m.meta, atual: m.atual, cor: m.cor } : { nome: '', meta: '', atual: '', cor: '#7c3aed' }); setModalMeta(m ? m.id : 'novo') }
+  const abrirMeta = (m = null) => {
+    setFMeta(m ? { nome: m.nome, meta: m.meta, atual: m.atual, cor: m.cor } : { nome:'', meta:'', atual:'', cor:'#7c3aed' })
+    setModalMeta(m ? m.id : 'novo')
+  }
   const salvarMeta = () => {
     if (!fMeta.nome || !fMeta.meta) return
     if (modalMeta === 'novo') setMetas(p => [...p, { ...fMeta, id: Date.now(), meta: +fMeta.meta, atual: +fMeta.atual || 0 }])
@@ -87,16 +146,14 @@ export default function Financas() {
     setModalMeta(null)
   }
 
-  const receitas = transacoes.filter(t => t.valor > 0).reduce((s, t) => s + t.valor, 0)
-  const despesas = transacoes.filter(t => t.valor < 0).reduce((s, t) => s + Math.abs(t.valor), 0)
-  const saldo = receitas - despesas
-
-  const chipCls = (ativo) => clsx('px-3 py-1.5 rounded-xl text-xs font-bold border transition-all', ativo ? 'bg-brand-500 text-white border-brand-500' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700')
+  const chip = (ativo) => clsx('px-3 py-1.5 rounded-xl text-xs font-bold border transition-all',
+    ativo ? 'bg-brand-500 text-white border-brand-500' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700')
 
   return (
     <div className="page-container animate-fade-in-up">
       <h1 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-5">Finanças</h1>
 
+      {/* Saldo */}
       <div className="bg-gradient-to-br from-brand-500 to-brand-700 rounded-3xl p-6 mb-5 text-white shadow-lg shadow-brand-200">
         <p className="text-sm font-bold text-brand-200 mb-1">Saldo Atual</p>
         <p className="text-4xl font-black mb-3">R$ {saldo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
@@ -113,6 +170,7 @@ export default function Financas() {
         </div>
       </div>
 
+      {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-2xl p-1 mb-5">
         {TABS.map((t, i) => (
           <button key={t} onClick={() => setTab(i)}
@@ -122,44 +180,117 @@ export default function Financas() {
         ))}
       </div>
 
+      {/* VISÃO GERAL — gráficos reativos */}
       {tab === 0 && (
         <div className="space-y-5">
+          {/* Evolução mensal real */}
           <div className="card">
-            <h3 className="font-bold text-gray-700 dark:text-gray-300 mb-4">Evolução do Saldo</h3>
-            <ResponsiveContainer width="100%" height={160}>
-              <LineChart data={evolucao}>
-                <XAxis dataKey="mes" tick={{ fontSize: 11, fontWeight: 600, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                <YAxis hide />
-                <Tooltip formatter={v => [`R$ ${v.toLocaleString('pt-BR')}`, 'Saldo']} contentStyle={{ borderRadius: 12, border: 'none', fontSize: 12 }} />
-                <Line type="monotone" dataKey="saldo" stroke="#7c3aed" strokeWidth={3} dot={{ r: 4, fill: '#7c3aed' }} />
-              </LineChart>
-            </ResponsiveContainer>
+            <h3 className="font-bold text-gray-700 dark:text-gray-300 mb-1">Evolução do Saldo</h3>
+            <p className="text-xs text-gray-400 font-semibold mb-4">Baseado nas suas transações reais</p>
+            {evolucaoMensal.every(d => d.saldo === 0) ? (
+              <div className="text-center py-6">
+                <p className="text-sm text-gray-400 font-semibold">Adicione transações para ver o gráfico</p>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={160}>
+                <LineChart data={evolucaoMensal}>
+                  <XAxis dataKey="mes" tick={{ fontSize: 11, fontWeight: 600, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                  <YAxis hide />
+                  <Tooltip
+                    formatter={v => [`R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'Saldo']}
+                    contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 24px rgba(0,0,0,0.08)', fontSize: 12 }}
+                  />
+                  <Line type="monotone" dataKey="saldo" stroke="#7c3aed" strokeWidth={3} dot={{ r: 4, fill: '#7c3aed' }} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
           </div>
+
+          {/* Gastos por categoria (calculado dos dados reais) */}
           <div className="card">
-            <h3 className="font-bold text-gray-700 dark:text-gray-300 mb-4">Gastos por Categoria</h3>
-            <ResponsiveContainer width="100%" height={140}>
-              <BarChart data={gastosCat} layout="vertical">
-                <XAxis type="number" hide />
-                <YAxis dataKey="cat" type="category" tick={{ fontSize: 11, fontWeight: 600, fill: '#6b7280' }} axisLine={false} tickLine={false} width={80} />
-                <Tooltip formatter={v => [`R$ ${v}`, '']} contentStyle={{ borderRadius: 12, border: 'none', fontSize: 12 }} />
-                <Bar dataKey="valor" radius={[0, 8, 8, 0]}>{gastosCat.map((e, i) => <Cell key={i} fill={e.color} />)}</Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            <h3 className="font-bold text-gray-700 dark:text-gray-300 mb-1">Gastos por Categoria</h3>
+            <p className="text-xs text-gray-400 font-semibold mb-4">Calculado das suas despesas</p>
+            {gastosCat.length === 0 ? (
+              <div className="text-center py-6">
+                <p className="text-sm text-gray-400 font-semibold">Nenhuma despesa registrada ainda</p>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={Math.max(120, gastosCat.length * 32)}>
+                <BarChart data={gastosCat} layout="vertical">
+                  <XAxis type="number" hide />
+                  <YAxis dataKey="cat" type="category" tick={{ fontSize: 11, fontWeight: 600, fill: '#6b7280' }} axisLine={false} tickLine={false} width={90} />
+                  <Tooltip
+                    formatter={v => [`R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, '']}
+                    contentStyle={{ borderRadius: 12, border: 'none', fontSize: 12 }}
+                  />
+                  <Bar dataKey="valor" radius={[0, 8, 8, 0]}>
+                    {gastosCat.map((e, i) => <Cell key={i} fill={e.color} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          {/* Resumo rápido */}
+          <div className="card">
+            <h3 className="font-bold text-gray-700 dark:text-gray-300 mb-3">Resumo do mês</h3>
+            <div className="space-y-2">
+              {transacoes.length === 0 ? (
+                <p className="text-sm text-gray-300 dark:text-gray-600 text-center py-2">Nenhuma transação</p>
+              ) : (
+                <>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500 dark:text-gray-400 font-semibold">Total de transações</span>
+                    <span className="font-bold text-gray-700 dark:text-gray-300">{transacoes.length}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500 dark:text-gray-400 font-semibold">Maior despesa</span>
+                    <span className="font-bold text-red-500">
+                      {transacoes.filter(t => t.valor < 0).length > 0
+                        ? `R$ ${Math.abs(Math.min(...transacoes.filter(t => t.valor < 0).map(t => t.valor))).toFixed(2)}`
+                        : '—'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500 dark:text-gray-400 font-semibold">Maior receita</span>
+                    <span className="font-bold text-emerald-500">
+                      {transacoes.filter(t => t.valor > 0).length > 0
+                        ? `R$ ${Math.max(...transacoes.filter(t => t.valor > 0).map(t => t.valor)).toFixed(2)}`
+                        : '—'}
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
 
+      {/* TRANSAÇÕES */}
       {tab === 1 && (
         <div className="space-y-2">
-          <button onClick={() => abrirTrans()} className="w-full btn-primary flex items-center justify-center gap-2 mb-3"><Plus size={18} /> Adicionar transação</button>
-          {transacoes.map(t => (
+          <button onClick={() => abrirTrans()} className="w-full btn-primary flex items-center justify-center gap-2 mb-3">
+            <Plus size={18} /> Adicionar transação
+          </button>
+          {transacoes.length === 0 && (
+            <div className="card text-center py-8">
+              <p className="text-sm font-bold text-gray-400">Nenhuma transação ainda</p>
+              <p className="text-xs text-gray-300 dark:text-gray-600 mt-1">Adicione receitas e despesas para começar</p>
+            </div>
+          )}
+          {[...transacoes].reverse().map(t => (
             <div key={t.id} className="card flex items-center gap-3 py-3">
               <div className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 ${t.valor > 0 ? 'bg-emerald-100 dark:bg-emerald-900' : 'bg-red-50 dark:bg-red-950'}`}>
                 {t.valor > 0 ? <TrendingUp size={18} className="text-emerald-500" /> : <TrendingDown size={18} className="text-red-400" />}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-gray-800 dark:text-gray-100 truncate">{t.desc}</p>
-                <p className="text-xs text-gray-400 font-semibold">{t.data} · {t.cat}</p>
+                <p className="text-xs text-gray-400 font-semibold">
+                  {t.data
+                    ? (() => { try { return new Date(t.data + 'T12:00').toLocaleDateString('pt-BR') } catch { return t.data } })()
+                    : ''
+                  } · {t.cat}
+                </p>
               </div>
               <span className={`text-sm font-black flex-shrink-0 ${t.valor > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                 {t.valor > 0 ? '+' : ''}R$ {Math.abs(t.valor).toFixed(2)}
@@ -171,6 +302,7 @@ export default function Financas() {
         </div>
       )}
 
+      {/* CARTÕES */}
       {tab === 2 && (
         <div className="space-y-4">
           {cartoes.map(c => (
@@ -186,20 +318,29 @@ export default function Financas() {
                 </div>
               </div>
               <p className="text-sm text-white/70 font-bold mb-1">Fatura atual</p>
-              <p className="text-3xl font-black mb-3">R$ {c.fatura.toFixed(2)}</p>
+              <p className="text-3xl font-black mb-3">R$ {(+c.fatura).toFixed(2)}</p>
               <div className="bg-white/20 h-2 rounded-full overflow-hidden">
                 <div className="bg-white h-full rounded-full" style={{ width: `${Math.min((c.fatura / c.limite) * 100, 100)}%` }} />
               </div>
-              <p className="text-xs text-white/70 font-bold mt-2">R$ {c.fatura.toFixed(2)} de R$ {c.limite.toLocaleString()} ({Math.round((c.fatura / c.limite) * 100)}% usado)</p>
+              <p className="text-xs text-white/70 font-bold mt-2">
+                R$ {(+c.fatura).toFixed(2)} de R$ {(+c.limite).toLocaleString()} ({Math.round((c.fatura / c.limite) * 100)}% usado)
+              </p>
             </div>
           ))}
+          {cartoes.length === 0 && (
+            <div className="card text-center py-8"><CreditCard size={32} className="text-gray-200 dark:text-gray-700 mx-auto mb-2" /><p className="text-sm font-bold text-gray-400">Nenhum cartão cadastrado</p></div>
+          )}
           <button onClick={() => abrirCartao()} className="w-full btn-primary flex items-center justify-center gap-2"><Plus size={18} /> Adicionar cartão</button>
         </div>
       )}
 
+      {/* METAS */}
       {tab === 3 && (
         <div className="space-y-3">
           <button onClick={() => abrirMeta()} className="w-full btn-primary flex items-center justify-center gap-2 mb-1"><Plus size={18} /> Nova meta financeira</button>
+          {metas.length === 0 && (
+            <div className="card text-center py-8"><p className="text-sm font-bold text-gray-400">Nenhuma meta cadastrada</p></div>
+          )}
           {metas.map(m => (
             <div key={m.id} className="card">
               <div className="flex items-center justify-between mb-3">
@@ -210,7 +351,8 @@ export default function Financas() {
                 </div>
               </div>
               <div className="flex justify-between text-xs font-bold text-gray-400 mb-2">
-                <span>R$ {(+m.atual).toLocaleString('pt-BR')}</span><span>R$ {(+m.meta).toLocaleString('pt-BR')}</span>
+                <span>R$ {(+m.atual).toLocaleString('pt-BR')}</span>
+                <span>R$ {(+m.meta).toLocaleString('pt-BR')}</span>
               </div>
               <div className="progress-bar h-2.5">
                 <div className="progress-fill" style={{ width: `${Math.min((m.atual / m.meta) * 100, 100)}%`, backgroundColor: m.cor }} />
@@ -226,31 +368,21 @@ export default function Financas() {
         <Modal titulo={modalTrans === 'novo' ? 'Nova transação' : 'Editar transação'} onClose={() => setModalTrans(null)}>
           <div className="space-y-4">
             <div className="flex gap-2">
-              {['receita', 'despesa'].map(t => (
+              {['receita','despesa'].map(t => (
                 <button key={t} onClick={() => setFTrans(p => ({ ...p, tipo: t }))}
-                  className={clsx('flex-1 py-3 rounded-2xl text-sm font-bold border transition-all', fTrans.tipo === t ? t === 'receita' ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-red-500 text-white border-red-500' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700')}>
+                  className={clsx('flex-1 py-3 rounded-2xl text-sm font-bold border transition-all',
+                    fTrans.tipo === t ? t === 'receita' ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-red-500 text-white border-red-500'
+                    : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700')}>
                   {t === 'receita' ? '↑ Receita' : '↓ Despesa'}
                 </button>
               ))}
             </div>
-            <div>
-              <label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1 block">Descrição</label>
-              <input type="text" value={fTrans.desc} onChange={e => setFTrans(p => ({ ...p, desc: e.target.value }))} placeholder="Ex: Supermercado" className="input" autoFocus />
-            </div>
+            <div><label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1 block">Descrição</label><input type="text" value={fTrans.desc} onChange={e => setFTrans(p => ({ ...p, desc: e.target.value }))} placeholder="Ex: Supermercado" className="input" autoFocus /></div>
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1 block">Valor (R$)</label>
-                <input type="number" step="0.01" value={fTrans.valor} onChange={e => setFTrans(p => ({ ...p, valor: e.target.value }))} placeholder="0,00" className="input" />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1 block">Data</label>
-                <input type="date" value={fTrans.data} onChange={e => setFTrans(p => ({ ...p, data: e.target.value }))} className="input" />
-              </div>
+              <div><label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1 block">Valor (R$)</label><input type="number" step="0.01" value={fTrans.valor} onChange={e => setFTrans(p => ({ ...p, valor: e.target.value }))} placeholder="0,00" className="input" /></div>
+              <div><label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1 block">Data</label><input type="date" value={fTrans.data} onChange={e => setFTrans(p => ({ ...p, data: e.target.value }))} className="input" /></div>
             </div>
-            <div>
-              <label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2 block">Categoria</label>
-              <div className="flex flex-wrap gap-2">{CATS.map(c => <button key={c} onClick={() => setFTrans(p => ({ ...p, cat: c }))} className={chipCls(fTrans.cat === c)}>{c}</button>)}</div>
-            </div>
+            <div><label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2 block">Categoria</label><div className="flex flex-wrap gap-2">{CATS.map(c => <button key={c} onClick={() => setFTrans(p => ({ ...p, cat: c }))} className={chip(fTrans.cat === c)}>{c}</button>)}</div></div>
             <div className="flex gap-2 pt-1">
               <button onClick={() => setModalTrans(null)} className="flex-1 py-3 rounded-2xl border border-gray-200 dark:border-gray-700 text-sm font-bold text-gray-500">Cancelar</button>
               <button onClick={salvarTrans} className="flex-1 btn-primary py-3 flex items-center justify-center gap-2"><Check size={16} /> Salvar</button>
@@ -263,27 +395,12 @@ export default function Financas() {
       {modalCartao && (
         <Modal titulo={modalCartao === 'novo' ? 'Novo cartão' : 'Editar cartão'} onClose={() => setModalCartao(null)}>
           <div className="space-y-4">
-            <div>
-              <label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1 block">Nome do cartão</label>
-              <input type="text" value={fCartao.nome} onChange={e => setFCartao(p => ({ ...p, nome: e.target.value }))} placeholder="Ex: Nubank" className="input" autoFocus />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2 block">Bandeira</label>
-              <div className="flex flex-wrap gap-2">{BANDEIRAS.map(b => <button key={b} onClick={() => setFCartao(p => ({ ...p, bandeira: b }))} className={chipCls(fCartao.bandeira === b)}>{b}</button>)}</div>
-            </div>
+            <div><label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1 block">Nome do cartão</label><input type="text" value={fCartao.nome} onChange={e => setFCartao(p => ({ ...p, nome: e.target.value }))} placeholder="Ex: Nubank" className="input" autoFocus /></div>
+            <div><label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2 block">Bandeira</label><div className="flex flex-wrap gap-2">{BANDEIRAS.map(b => <button key={b} onClick={() => setFCartao(p => ({ ...p, bandeira: b }))} className={chip(fCartao.bandeira === b)}>{b}</button>)}</div></div>
             <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1 block">Limite (R$)</label>
-                <input type="number" value={fCartao.limite} onChange={e => setFCartao(p => ({ ...p, limite: e.target.value }))} placeholder="5000" className="input" />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1 block">Fatura (R$)</label>
-                <input type="number" value={fCartao.fatura} onChange={e => setFCartao(p => ({ ...p, fatura: e.target.value }))} placeholder="0" className="input" />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1 block">Vencimento</label>
-                <input type="number" min="1" max="31" value={fCartao.vencimento} onChange={e => setFCartao(p => ({ ...p, vencimento: e.target.value }))} placeholder="10" className="input" />
-              </div>
+              <div><label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1 block">Limite (R$)</label><input type="number" value={fCartao.limite} onChange={e => setFCartao(p => ({ ...p, limite: e.target.value }))} placeholder="5000" className="input" /></div>
+              <div><label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1 block">Fatura (R$)</label><input type="number" value={fCartao.fatura} onChange={e => setFCartao(p => ({ ...p, fatura: e.target.value }))} placeholder="0" className="input" /></div>
+              <div><label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1 block">Vencimento</label><input type="number" min="1" max="31" value={fCartao.vencimento} onChange={e => setFCartao(p => ({ ...p, vencimento: e.target.value }))} placeholder="10" className="input" /></div>
             </div>
             <div className="flex gap-2 pt-1">
               <button onClick={() => setModalCartao(null)} className="flex-1 py-3 rounded-2xl border border-gray-200 dark:border-gray-700 text-sm font-bold text-gray-500">Cancelar</button>
@@ -297,24 +414,12 @@ export default function Financas() {
       {modalMeta && (
         <Modal titulo={modalMeta === 'novo' ? 'Nova meta' : 'Editar meta'} onClose={() => setModalMeta(null)}>
           <div className="space-y-4">
-            <div>
-              <label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1 block">Nome da meta</label>
-              <input type="text" value={fMeta.nome} onChange={e => setFMeta(p => ({ ...p, nome: e.target.value }))} placeholder="Ex: Reserva de emergência" className="input" autoFocus />
-            </div>
+            <div><label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1 block">Nome da meta</label><input type="text" value={fMeta.nome} onChange={e => setFMeta(p => ({ ...p, nome: e.target.value }))} placeholder="Ex: Reserva de emergência" className="input" autoFocus /></div>
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1 block">Meta (R$)</label>
-                <input type="number" value={fMeta.meta} onChange={e => setFMeta(p => ({ ...p, meta: e.target.value }))} placeholder="15000" className="input" />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1 block">Atual (R$)</label>
-                <input type="number" value={fMeta.atual} onChange={e => setFMeta(p => ({ ...p, atual: e.target.value }))} placeholder="0" className="input" />
-              </div>
+              <div><label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1 block">Meta (R$)</label><input type="number" value={fMeta.meta} onChange={e => setFMeta(p => ({ ...p, meta: e.target.value }))} placeholder="15000" className="input" /></div>
+              <div><label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1 block">Atual (R$)</label><input type="number" value={fMeta.atual} onChange={e => setFMeta(p => ({ ...p, atual: e.target.value }))} placeholder="0" className="input" /></div>
             </div>
-            <div>
-              <label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2 block">Cor</label>
-              <div className="flex gap-3">{CORES_META.map(cor => <button key={cor} onClick={() => setFMeta(p => ({ ...p, cor }))} className={clsx('w-9 h-9 rounded-xl transition-all', fMeta.cor === cor ? 'ring-2 ring-offset-2 ring-gray-400 scale-110' : '')} style={{ backgroundColor: cor }} />)}</div>
-            </div>
+            <div><label className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2 block">Cor</label><div className="flex gap-3">{CORES_META.map(cor => <button key={cor} onClick={() => setFMeta(p => ({ ...p, cor }))} className={clsx('w-9 h-9 rounded-xl transition-all', fMeta.cor === cor ? 'ring-2 ring-offset-2 ring-gray-400 scale-110' : '')} style={{ backgroundColor: cor }} />)}</div></div>
             <div className="flex gap-2 pt-1">
               <button onClick={() => setModalMeta(null)} className="flex-1 py-3 rounded-2xl border border-gray-200 dark:border-gray-700 text-sm font-bold text-gray-500">Cancelar</button>
               <button onClick={salvarMeta} className="flex-1 btn-primary py-3 flex items-center justify-center gap-2"><Check size={16} /> Salvar</button>

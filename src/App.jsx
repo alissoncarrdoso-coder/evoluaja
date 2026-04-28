@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ThemeProvider } from './context/ThemeContext'
+import { AppProvider } from './context/AppContext'
 import Layout from './components/layout/Layout'
 import Dashboard from './pages/Dashboard'
 import Rotina from './pages/Rotina'
@@ -16,24 +17,26 @@ import Perfil from './pages/Perfil'
 export default function App() {
   return (
     <ThemeProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="rotina" element={<Rotina />} />
-            <Route path="habitos" element={<Habitos />} />
-            <Route path="financas" element={<Financas />} />
-            <Route path="alimentacao" element={<Alimentacao />} />
-            <Route path="treinos" element={<Treinos />} />
-            <Route path="estudos" element={<Estudos />} />
-            <Route path="casa" element={<Casa />} />
-            <Route path="saude" element={<Saude />} />
-            <Route path="progresso" element={<Progresso />} />
-            <Route path="perfil" element={<Perfil />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
+      <AppProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Layout />}>
+              <Route index element={<Dashboard />} />
+              <Route path="rotina" element={<Rotina />} />
+              <Route path="habitos" element={<Habitos />} />
+              <Route path="financas" element={<Financas />} />
+              <Route path="alimentacao" element={<Alimentacao />} />
+              <Route path="treinos" element={<Treinos />} />
+              <Route path="estudos" element={<Estudos />} />
+              <Route path="casa" element={<Casa />} />
+              <Route path="saude" element={<Saude />} />
+              <Route path="progresso" element={<Progresso />} />
+              <Route path="perfil" element={<Perfil />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </AppProvider>
     </ThemeProvider>
   )
 }
