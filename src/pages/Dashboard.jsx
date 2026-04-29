@@ -5,7 +5,7 @@ import { useLocalStorage } from '../hooks/useLocalStorage'
 import { useApp } from '../context/AppContext'
 import StreakBanner from '../components/ui/StreakBanner'
 
-// ── Saudação dinâmica ────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────
 function getSaudacao() {
   const h = new Date().getHours()
   if (h < 12) return 'Bom dia! ☀️'
@@ -13,30 +13,30 @@ function getSaudacao() {
   return 'Boa noite! 🌙'
 }
 
-function getDataFormatada() {
-  return new Date().toLocaleDateString('pt-BR', {
-    weekday: 'long', day: '2-digit', month: 'long'
-  }).replace(/^\w/, c => c.toUpperCase())
+function getDayPct() {
+  const now = new Date()
+  return Math.round(((now.getHours() * 60 + now.getMinutes()) / 1440) * 100)
 }
+
+function toKey(d) { return d.toISOString().split('T')[0] }
+const hojeKey = toKey(new Date())
 
 // ── Circular progress ────────────────────────────────────────────
 function CircularProgress({ pct }) {
   const r = 36, circ = 2 * Math.PI * r, offset = circ - (pct / 100) * circ
   return (
     <svg width={88} height={88} viewBox="0 0 88 88" className="-rotate-90">
-      <circle cx="44" cy="44" r={r} fill="none" stroke="#ede9fe" strokeWidth="8" className="dark:stroke-brand-950" />
+      <circle cx="44" cy="44" r={r} fill="none" strokeWidth="8" className="stroke-brand-100 dark:stroke-brand-950" />
       <circle cx="44" cy="44" r={r} fill="none" stroke="#7c3aed" strokeWidth="8"
         strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
         style={{ transition: 'stroke-dashoffset 1s ease' }} />
-      <text x="44" y="44" textAnchor="middle" dominantBaseline="central" fill="#4c1d95"
-        style={{ fontSize: 15, fontWeight: 800, transform: 'rotate(90deg)', transformOrigin: '44px 44px', fontFamily: 'Nunito' }}>
+      <text x="44" y="44" textAnchor="middle" dominantBaseline="central" fill="#6d28d9"
+        style={{ fontSize: 14, fontWeight: 800, transform: 'rotate(90deg)', transformOrigin: '44px 44px', fontFamily: 'Nunito' }}>
         {pct}%
       </text>
     </svg>
   )
 }
-
-const hojeKey = new Date().toISOString().split('T')[0]
 
 const catColors = {
   'Trabalho':    'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300',
@@ -51,42 +51,43 @@ export default function Dashboard() {
   const [generating, setGenerating] = useState(false)
   const { perfil, streak, frase, animando, registrarUso } = useApp()
 
-  // Saudação atualiza a cada minuto
-  const [saudacao, setSaudacao] = useState(getSaudacao)
-  const [dataStr, setDataStr] = useState(getDataFormatada)
+  // ── Estado dinâmico — atualiza a cada minuto ──────────────────
+  const [saudacao, setSaudacao]   = useState(getSaudacao)
+  const [dayPct, setDayPct]       = useState(getDayPct)
+  const [horaAtual, setHoraAtual] = useState(() => new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }))
+
   useEffect(() => {
-    const timer = setInterval(() => {
+    const tick = () => {
       setSaudacao(getSaudacao())
-      setDataStr(getDataFormatada())
-    }, 60_000)
-    return () => clearInterval(timer)
+      setDayPct(getDayPct())
+      setHoraAtual(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }))
+    }
+    // Alinha ao próximo minuto cheio
+    const msAteProximoMinuto = (60 - new Date().getSeconds()) * 1000
+    const timeout = setTimeout(() => {
+      tick()
+      const interval = setInterval(tick, 60_000)
+      return () => clearInterval(interval)
+    }, msAteProximoMinuto)
+    return () => clearTimeout(timeout)
   }, [])
 
-  // Porcentagem do dia (atualiza a cada minuto)
-  const [dayPct, setDayPct] = useState(() => {
-    const now = new Date()
-    return Math.round(((now.getHours() * 60 + now.getMinutes()) / 1440) * 100)
-  })
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const now = new Date()
-      setDayPct(Math.round(((now.getHours() * 60 + now.getMinutes()) / 1440) * 100))
-    }, 60_000)
-    return () => clearInterval(timer)
-  }, [])
+  // ── Dados dos módulos ─────────────────────────────────────────
+  const [habDef]    = useLocalStorage('evoluaja_habitos_def', [])
+  const [habReg]    = useLocalStorage('evoluaja_habitos_reg', {})
+  const [transacoes]= useLocalStorage('evoluaja_transacoes', [])
+  const [tarefasAll]= useLocalStorage('evoluaja_tarefas_v2', {})
 
-  // Dados dos módulos (lidos do localStorage para ficarem reativos à navegação)
-  const [habitos] = useLocalStorage('evoluaja_habitos', [])
-  const [transacoes] = useLocalStorage('evoluaja_transacoes', [])
-  const [todasTarefas] = useLocalStorage('evoluaja_tarefas_v2', {})
-  const tarefasHoje = todasTarefas[hojeKey] || []
-
-  const saldo = transacoes.reduce((s, t) => s + t.valor, 0)
-  const habitosDone = habitos.filter(h => h.done).length
+  const tarefasHoje = tarefasAll[hojeKey] || []
+  const regHoje     = habReg[hojeKey] || {}
+  const habitosDone = habDef.filter(h => !!regHoje[h.id]).length
   const tarefasDone = tarefasHoje.filter(t => t.status === 'done').length
+  const saldo       = transacoes.reduce((s, t) => s + t.valor, 0)
+  const primeiroNome = (perfil.nome || 'Usuário').split(' ')[0]
 
-  // Primeiro nome do perfil
-  const primeiroNome = perfil.nome?.split(' ')[0] || 'Usuário'
+  const dataStr = new Date().toLocaleDateString('pt-BR', {
+    weekday: 'long', day: '2-digit', month: 'long'
+  }).replace(/^\w/, c => c.toUpperCase())
 
   const cards = [
     {
@@ -98,8 +99,8 @@ export default function Dashboard() {
     },
     {
       label: 'Hábitos Hoje',
-      value: habitos.length === 0 ? '—' : `${habitosDone} / ${habitos.length}`,
-      sub: habitos.length === 0 ? 'nenhum hábito' : `${habitos.length - habitosDone} restantes`,
+      value: habDef.length === 0 ? '—' : `${habitosDone} / ${habDef.length}`,
+      sub: habDef.length === 0 ? 'nenhum hábito cadastrado' : `${habDef.length - habitosDone} restantes`,
       bg: 'bg-brand-500', icon: CheckCircle2, path: '/habitos'
     },
     {
@@ -119,7 +120,7 @@ export default function Dashboard() {
   return (
     <div className="page-container animate-fade-in-up">
 
-      {/* ── Saudação dinâmica ── */}
+      {/* ── Saudação + progresso do dia ── */}
       <div className="flex items-center justify-between mb-5 pt-2">
         <div>
           <p className="text-sm font-semibold text-gray-400 dark:text-gray-500">{saudacao}</p>
@@ -127,14 +128,15 @@ export default function Dashboard() {
             Olá, {primeiroNome}!
           </h1>
           <p className="text-xs text-gray-400 dark:text-gray-500 font-semibold mt-0.5">{dataStr}</p>
+          <p className="text-xs text-gray-300 dark:text-gray-600 font-semibold">{horaAtual}</p>
         </div>
         <div className="flex flex-col items-center gap-1">
           <CircularProgress pct={dayPct} />
-          <span className="text-[10px] font-bold text-gray-400">do dia</span>
+          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500">do dia</span>
         </div>
       </div>
 
-      {/* ── Streak + Frase motivacional ── */}
+      {/* ── Streak + frase motivacional ── */}
       <div className="mb-5">
         <StreakBanner streak={streak} frase={frase} animando={animando} />
       </div>
@@ -175,27 +177,35 @@ export default function Dashboard() {
           <h2 className="section-title mb-0">Hábitos do dia</h2>
           <button onClick={() => navigate('/habitos')} className="btn-ghost py-1 text-xs">Ver todos</button>
         </div>
-        {habitos.length === 0 ? (
-          <p className="text-sm text-gray-300 dark:text-gray-600 font-semibold text-center py-2">Nenhum hábito cadastrado ainda</p>
+        {habDef.length === 0 ? (
+          <p className="text-sm text-gray-300 dark:text-gray-600 font-semibold text-center py-3">
+            Nenhum hábito cadastrado ainda
+          </p>
         ) : (
           <>
             <div className="space-y-2">
-              {habitos.slice(0, 5).map(h => (
-                <div key={h.id} className="flex items-center gap-3">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${h.done ? 'bg-emerald-100 dark:bg-emerald-900' : 'bg-gray-100 dark:bg-gray-800'}`}>
-                    {h.done
-                      ? <CheckCircle2 size={16} className="text-emerald-500" />
-                      : <div className="w-3 h-3 rounded-full border-2 border-gray-300 dark:border-gray-600" />}
+              {habDef.slice(0, 5).map(h => {
+                const done = !!regHoje[h.id]
+                return (
+                  <div key={h.id} className="flex items-center gap-3">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${done ? 'bg-emerald-100 dark:bg-emerald-900' : 'bg-gray-100 dark:bg-gray-800'}`}>
+                      {done
+                        ? <CheckCircle2 size={16} className="text-emerald-500" />
+                        : <div className="w-3 h-3 rounded-full border-2 border-gray-300 dark:border-gray-600" />}
+                    </div>
+                    <span className="text-sm flex-shrink-0">{h.emoji}</span>
+                    <span className={`text-sm font-semibold truncate ${done ? 'line-through text-gray-300 dark:text-gray-600' : 'text-gray-700 dark:text-gray-300'}`}>
+                      {h.nome}
+                    </span>
                   </div>
-                  <span className="text-sm flex-shrink-0">{h.emoji}</span>
-                  <span className={`text-sm font-semibold truncate ${h.done ? 'line-through text-gray-300 dark:text-gray-600' : 'text-gray-700 dark:text-gray-300'}`}>{h.nome}</span>
-                </div>
-              ))}
+                )
+              })}
             </div>
             <div className="mt-4 progress-bar">
-              <div className="progress-fill bg-emerald-400" style={{ width: `${habitos.length ? (habitosDone / habitos.length) * 100 : 0}%` }} />
+              <div className="progress-fill bg-emerald-400"
+                style={{ width: `${habDef.length ? (habitosDone / habDef.length) * 100 : 0}%` }} />
             </div>
-            <p className="text-xs font-bold text-emerald-600 mt-2">{habitosDone}/{habitos.length} concluídos</p>
+            <p className="text-xs font-bold text-emerald-600 mt-2">{habitosDone}/{habDef.length} concluídos hoje</p>
           </>
         )}
       </div>
@@ -207,7 +217,7 @@ export default function Dashboard() {
           <button onClick={() => navigate('/rotina')} className="btn-ghost py-1 text-xs">Ver rotina</button>
         </div>
         {tarefasHoje.filter(t => t.status !== 'done').length === 0 ? (
-          <p className="text-sm text-gray-300 dark:text-gray-600 font-semibold text-center py-2">
+          <p className="text-sm text-gray-300 dark:text-gray-600 font-semibold text-center py-3">
             {tarefasHoje.length === 0 ? 'Nenhuma tarefa para hoje' : '✅ Todas as tarefas concluídas!'}
           </p>
         ) : (
@@ -218,13 +228,16 @@ export default function Dashboard() {
                 <div className="w-px h-8 bg-gray-100 dark:bg-gray-800" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-gray-700 dark:text-gray-300 truncate">{t.titulo}</p>
-                  <span className={`badge mt-0.5 inline-block ${catColors[t.cat] || 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`}>{t.cat}</span>
+                  <span className={`badge mt-0.5 inline-block ${catColors[t.cat] || 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'}`}>
+                    {t.cat}
+                  </span>
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
     </div>
   )
 }
