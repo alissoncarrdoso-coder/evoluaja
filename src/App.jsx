@@ -13,6 +13,7 @@ import Casa from './pages/Casa'
 import Saude from './pages/Saude'
 import Progresso from './pages/Progresso'
 import Perfil from './pages/Perfil'
+import GerarRotina from './pages/GerarRotina'
 
 export default function App() {
   return (
@@ -20,6 +21,10 @@ export default function App() {
       <AppProvider>
         <BrowserRouter>
           <Routes>
+            {/* Página de chat da IA — sem o Layout (barra de navegação) */}
+            <Route path="/gerar-rotina" element={<GerarRotina />} />
+
+            {/* Páginas normais com Layout */}
             <Route path="/" element={<Layout />}>
               <Route index element={<Dashboard />} />
               <Route path="rotina" element={<Rotina />} />
